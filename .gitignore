@@ -1,0 +1,10 @@
+# Sensitive files
+*.env
+.env.*
+secrets/
+letsencrypt/
+npm/data/
+
+# OS
+.DS_Store
+Thumbs.db
