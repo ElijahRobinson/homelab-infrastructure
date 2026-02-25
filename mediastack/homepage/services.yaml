@@ -1,0 +1,37 @@
+- Media:
+    - Jellyfin:
+        href: https://jellyfin.idiotproductions.net
+        description: Media Server
+        icon: jellyfin.png
+    - Jellyseerr:
+        href: https://jellyseerr.idiotproductions.net
+        description: Media Requests
+        icon: jellyseerr.png
+
+- arr Stack:
+    - Sonarr:
+        href: https://sonarr.idiotproductions.net
+        description: TV Shows
+        icon: sonarr.png
+    - Radarr:
+        href: https://radarr.idiotproductions.net
+        description: Movies
+        icon: radarr.png
+    - Prowlarr:
+        href: https://prowlarr.idiotproductions.net
+        description: Indexers
+        icon: prowlarr.png
+
+- Infrastructure:
+    - NPM:
+        href: http://10.0.0.136:81
+        description: Reverse Proxy
+        icon: nginx-proxy-manager.png
+    - AdGuard:
+        href: http://10.0.0.137
+        description: DNS & Ad Blocking
+        icon: adguard-home.png
+    - Uptime Kuma:
+        href: https://uptime.idiotproductions.net
+        description: Monitoring
+        icon: uptime-kuma.png
