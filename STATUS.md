@@ -8,16 +8,43 @@ A running overview of what's live, what's in progress, and what's planned.
 
 ## ✅ Live & Operational
 
+### 🖥️ Proxmox VE Host
+Hypervisor running all LXC containers.
+
+### 📦 LXC: jellyfin (`10.0.0.134`)
+
 | Service | Description |
 |---|---|
-| **Proxmox VE** | Hypervisor running all VMs and LXC containers |
 | **Jellyfin** | Self-hosted media server with network share storage |
-| **Nginx Proxy Manager** | Reverse proxy handling subdomain-based HTTPS access to internal services |
-| **Uptime Kuma** | Self-hosted monitoring and uptime tracking for all services |
+| **qBittorrent** | Torrent client for media downloads |
+| **NordVPN** | VPN tunnel for download traffic |
+| **FlareSolverr** | Cloudflare bypass proxy for indexers |
+
+### 📦 LXC: mediastack (`10.0.0.136`)
+
+| Service | Description |
+|---|---|
+| **Nginx Proxy Manager** | Reverse proxy handling subdomain-based HTTPS access |
+| **Sonarr** | Automated TV show management |
+| **Radarr** | Automated movie management |
+| **Prowlarr** | Indexer manager for Sonarr & Radarr |
+| **Jellyseerr** | Media request and discovery frontend |
+| **Uptime Kuma** | Self-hosted uptime monitoring |
+| **Homepage** | Homelab dashboard |
+| **Watchtower** | Automated Docker container updates |
+| **FlareSolverr** | Cloudflare bypass proxy for indexers |
+
+### 📦 LXC: adguard (`10.0.0.137`)
+
+| Service | Description |
+|---|---|
+| **Tailscale** | VPN mesh network for secure remote access |
 
 ---
 
 ## 🔧 In Progress
+
+### 📦 LXC: adguard (`10.0.0.137`)
 
 | Service | Status | Blocker |
 |---|---|---|
@@ -27,14 +54,17 @@ A running overview of what's live, what's in progress, and what's planned.
 
 ## 📋 Planned
 
+- Configure router as DNS gateway pointing to AdGuard Home (`10.0.0.137`)
+- Set up Tailscale for remote access
 - Expand monitoring dashboards (Grafana / Prometheus)
-- Automate VM provisioning with Ansible
+- Automate container provisioning with Ansible
 - Document full network topology
 
 ---
 
 ## 🗒️ Notes
 
-- All services run on a Proxmox-based homelab
+- All services run as LXC containers on a Proxmox-based homelab
+- Download traffic on the `jellyfin` LXC is routed through NordVPN
 - HTTPS access managed through Nginx Proxy Manager with a real domain
-- Uptime Kuma monitors all internal services
+- Uptime Kuma and Homepage are accessible via NPM subdomains
