@@ -1,10 +1,45 @@
-# Sensitive files
-*.env
-.env.*
-secrets/
-letsencrypt/
-npm/data/
-
-# OS
-.DS_Store
+# ========================
+# OS - Windows
+# ========================
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ========================
+# IDE - JetBrains
+# ========================
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# ========================
+# Homelab / Self-hosted
+# ========================
+# Environment files with secrets
+.env
+.env.*
+!.env.example
+
+# Docker volumes / local data
+data/
+volumes/
+
+# Logs
+*.log
+logs/
+
+# Backup files
+*.bak
+*.backup
+
+# Sensitive config (keys, certs, passwords)
+*.key
+*.pem
+*.crt
+*.p12
+secrets/
