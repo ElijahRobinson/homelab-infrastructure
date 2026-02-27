@@ -1,0 +1,56 @@
+flowchart TD
+    Internet(["🌐 Internet"])
+    Modem["ISP Modem"]
+    Router["Router\n🔜 Planned"]
+    Proxmox["Proxmox VE Host\n(vmbr0 bridge)"]
+    NAS["Windows 11 Machine\n(Media Storage / SMB Share)"]
+
+    subgraph jellyfin ["LXC: jellyfin (10.0.0.134)"]
+        Jellyfin["Jellyfin"]
+        qBit["qBittorrent"]
+        VPN["NordVPN"]
+        Flare1["FlareSolverr"]
+    end
+
+    subgraph mediastack ["LXC: mediastack (10.0.0.136)"]
+        NPM["Nginx Proxy Manager"]
+        Sonarr["Sonarr"]
+        Radarr["Radarr"]
+        Prowlarr["Prowlarr"]
+        Jellyseerr["Jellyseerr"]
+        Kuma["Uptime Kuma"]
+        Homepage["Homepage"]
+        Watchtower["Watchtower"]
+        Flare2["FlareSolverr"]
+    end
+
+    subgraph adguard ["LXC: adguard (10.0.0.137)"]
+        AdGuard["AdGuard Home 🔜"]
+        Tailscale["Tailscale"]
+    end
+
+    Internet --> Modem
+    Modem -. "Planned" .-> Router
+    Router -. "DNS" .-> AdGuard
+    Modem --> Proxmox
+    Proxmox --> jellyfin
+    Proxmox --> mediastack
+    Proxmox --> adguard
+
+    qBit --> VPN
+    Prowlarr --> Flare1
+    Prowlarr --> Flare2
+    Sonarr --> Prowlarr
+    Radarr --> Prowlarr
+    Jellyseerr --> Sonarr
+    Jellyseerr --> Radarr
+    Jellyfin -- "SMB" --> NAS
+
+    NPM -- "Reverse Proxy" --> Jellyfin
+    NPM -- "Reverse Proxy" --> Jellyseerr
+    NPM -- "Reverse Proxy" --> Kuma
+    NPM -- "Reverse Proxy" --> Homepage
+
+    Kuma -- "Monitors" --> Jellyfin
+    Kuma -- "Monitors" --> NPM
+    Kuma -- "Monitors" --> AdGuard
