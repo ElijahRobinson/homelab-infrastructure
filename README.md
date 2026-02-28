@@ -1,17 +1,42 @@
 # Homelab Infrastructure
 
-Full homelab setup documentation including reverse proxy, DNS ad-blocking, monitoring, and media stack running on Proxmox VE.
+Full homelab setup running on Proxmox VE — reverse proxy, DNS ad-blocking, remote access, monitoring, and a complete media automation stack.
+
+## Hardware
+
+| Component | Details |
+|-----------|---------|
+| Host | HP ProDesk 300 |
+| Hypervisor | Proxmox VE |
+| Domain | idiotproductions.net (Cloudflare) |
+| Proxmox IP | 10.0.0.234 |
+| Tailscale IP | 100.92.204.101 |
+
+---
 
 ## Architecture
 
-| LXC | IP | Services |
-|-----|----|----------|
-| jellyfin | 10.0.0.134 | Jellyfin, qBittorrent, NordVPN, FlareSolverr |
-| adguard | 10.0.0.137 | AdGuard Home, Tailscale |
-| mediastack | 10.0.0.136 | NPM, Sonarr, Radarr, Prowlarr, Jellyseerr, Uptime Kuma, Homepage, Watchtower, FlareSolverr |
+Three LXC containers running Ubuntu 22.04, each with a dedicated role:
 
-**Proxmox host:** 10.0.0.234 (Tailscale IP: 100.92.204.101)  
-**Domain:** idiotproductions.net (Cloudflare)
+| LXC | IP | Services |
+|-----|----|---------|
+| jellyfin | 10.0.0.134 | Jellyfin, qBittorrent, NordVPN, FlareSolverr |
+| mediastack | 10.0.0.136 | Nginx Proxy Manager, Sonarr, Radarr, Prowlarr, Jellyseerr, Uptime Kuma, Homepage, Watchtower |
+| adguard | 10.0.0.137 | AdGuard Home, Tailscale |
+
+The jellyfin and mediastack LXCs are intentionally split — NordVPN's kill switch inside the jellyfin LXC would otherwise block Docker container networking for the media management services.
+
+```
+Internet → Cloudflare DNS → Nginx Proxy Manager (10.0.0.136)
+                                      ↓
+                          Routes to internal services
+                          
+Phone (Tailscale) → Split DNS → BIND9 on Proxmox host
+                                      ↓
+                          Resolves *.idiotproductions.net → 10.0.0.136
+                                      ↓
+                          Tailscale subnet route → NPM → service
+```
 
 ---
 
@@ -33,17 +58,25 @@ Full homelab setup documentation including reverse proxy, DNS ad-blocking, monit
 - Split DNS: `idiotproductions.net` queries routed via BIND9 on Proxmox (port 53)
 - Tailscale DNS nameserver: `100.92.204.101`
 
+### Media Stack
+- **Jellyfin** — media server, streams to local network and via Tailscale
+- **Jellyseerr** — request management UI, integrates with Sonarr/Radarr
+- **Sonarr** — TV show automation
+- **Radarr** — movie automation
+- **Prowlarr** — indexer manager, feeds Sonarr and Radarr
+- **qBittorrent** — torrent client, runs behind NordVPN with kill switch enabled
+
 ### Monitoring — Uptime Kuma
 - Accessible at `https://uptime.idiotproductions.net`
 - Discord webhook notifications
-- Monitors: Jellyfin, Jellyseerr, Sonarr, Radarr, Prowlarr, NPM, AdGuard, Uptime Kuma
+- Monitors: Jellyfin, Jellyseerr, Sonarr, Radarr, Prowlarr, NPM, AdGuard
 
 ### Dashboard — Homepage
 - Accessible at `https://homepage.idiotproductions.net`
-- Displays all services with icons
+- Aggregates all services with status icons
 
 ### Auto-updates — Watchtower
-- Runs daily at 4am UTC
+- Runs daily at 4AM UTC
 - Auto-removes old images
 - Monitors all containers on host
 
@@ -51,7 +84,7 @@ Full homelab setup documentation including reverse proxy, DNS ad-blocking, monit
 
 ## Proxmox LXC Configuration
 
-All LXCs use Ubuntu 22.04. For Tailscale and Docker to work in unprivileged LXCs, add to `/etc/pve/lxc/<ID>.conf`:
+All LXCs run Ubuntu 22.04 unprivileged. For Tailscale and Docker to work, add to `/etc/pve/lxc/<ID>.conf`:
 
 ```
 features: keyctl=1,nesting=1
@@ -68,21 +101,66 @@ lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
 
 ---
 
-## Remote Access Flow
+## Troubleshooting
 
+### qBittorrent not downloading — NordVPN kill switch
+
+**Symptom:** Sonarr/Radarr queue shows items as "Queued", torrents appear in qBittorrent but sit at 0% with 0 peers and 0 seeds. DHT shows 0 nodes.
+
+**Cause:** NordVPN is installed as a system service inside the jellyfin LXC with the kill switch enabled. If NordVPN disconnects for any reason (reboot, crash, token expiry), all network traffic from qBittorrent is blocked.
+
+**Fix:**
+```bash
+# Check VPN status
+nordvpn status
+
+# Reconnect if disconnected
+nordvpn connect
+
+# Whitelist LAN so local services (Sonarr/Radarr) can always reach qBittorrent
+nordvpn whitelist add subnet 10.0.0.0/24
+
+# Enable auto-connect so VPN reconnects on reboot
+nordvpn set autoconnect on
 ```
-Phone (Tailscale) → DNS query for *.idiotproductions.net
-  → Tailscale split DNS → BIND9 on pve01 (100.92.204.101)
-  → Resolves to 10.0.0.136
-  → Tailscale subnet route → NPM on mediastack LXC
-  → Proxied to correct service
+
+**Why the LAN whitelist matters:** Sonarr and Radarr run on a different LXC (10.0.0.136) and communicate with qBittorrent over the local network. Without the subnet whitelist, the kill switch can block this cross-LXC traffic even when the VPN is connected.
+
+---
+
+### NordVPN overwrites /etc/resolv.conf
+
+**Symptom:** DNS failures inside the jellyfin LXC after NordVPN connects.
+
+**Cause:** NordVPN replaces `/etc/resolv.conf` with its own DNS servers, which can break local resolution.
+
+**Fix:** Cron job to restore DNS every minute:
+
+```bash
+# /etc/nordvpn/dns-fix.sh
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 ```
+
+```bash
+# Add to crontab
+* * * * * /etc/nordvpn/dns-fix.sh
+```
+
+---
+
+### AdGuard LXC IP conflict
+
+**Symptom:** Network conflicts on 10.0.0.135.
+
+**Cause:** A Nintendo Switch on the network claimed 10.0.0.135 via DHCP.
+
+**Fix:** Reassigned AdGuard LXC to 10.0.0.137. Updated DNS rewrite rules and all service configs to reflect the new IP.
 
 ---
 
 ## Notes
 
-- NordVPN runs in the Jellyfin LXC for qBittorrent only. Its kill switch blocks Docker container networking, which is why all infrastructure services were moved to a separate LXC.
-- AdGuard LXC IP was changed from 10.0.0.135 to 10.0.0.137 due to IP conflict with a Nintendo Switch on the network.
-- BIND9 is installed on Proxmox host to serve DNS over Tailscale interface.
+- NordVPN runs in the jellyfin LXC for qBittorrent only. Its kill switch breaks Docker networking, which is why all infrastructure services live in a separate mediastack LXC.
+- BIND9 is installed on the Proxmox host to serve DNS queries coming in over the Tailscale interface.
 - GL.iNet Flint 2 router pending setup for network-wide DNS via AdGuard.
