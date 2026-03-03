@@ -163,4 +163,4 @@ echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 
 - NordVPN runs in the jellyfin LXC for qBittorrent only. Its kill switch breaks Docker networking, which is why all infrastructure services live in a separate mediastack LXC.
 - BIND9 is installed on the Proxmox host to serve DNS queries coming in over the Tailscale interface.
-- GL.iNet Flint 2 router pending setup for network-wide DNS via AdGuard.
+- GL.iNet Flint 3 router pending setup for network-wide DNS via AdGuard.
