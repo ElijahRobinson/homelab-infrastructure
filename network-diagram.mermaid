@@ -1,19 +1,19 @@
 flowchart TD
     Internet(["🌐 Internet"])
-    Modem["ISP Modem"]
-    Router["Router\n🔜 Planned"]
-    Proxmox["Proxmox VE Host\n(vmbr0 bridge)"]
+    Modem["Rogers XB10\n(Bridge Mode)"]
+    Router["GL.iNet Flint 3\n10.0.0.1"]
+    Proxmox["Proxmox VE Host\n10.0.0.234\n(vmbr0 bridge)"]
     NAS["Windows 11 Machine\n(Media Storage / SMB Share)"]
 
     subgraph jellyfin ["LXC: jellyfin (10.0.0.134)"]
         Jellyfin["Jellyfin"]
         qBit["qBittorrent"]
-        VPN["NordVPN"]
+        VPN["NordVPN\n(kill switch)"]
         Flare1["FlareSolverr"]
     end
 
     subgraph mediastack ["LXC: mediastack (10.0.0.136)"]
-        NPM["Nginx Proxy Manager"]
+        NPM["Nginx Proxy Manager\n(wildcard SSL)"]
         Sonarr["Sonarr"]
         Radarr["Radarr"]
         Prowlarr["Prowlarr"]
@@ -21,25 +21,24 @@ flowchart TD
         Kuma["Uptime Kuma"]
         Homepage["Homepage"]
         Watchtower["Watchtower"]
-        Flare2["FlareSolverr"]
+        Tracker["Dark Angel Tracker"]
     end
 
     subgraph adguard ["LXC: adguard (10.0.0.137)"]
-        AdGuard["AdGuard Home 🔜"]
-        Tailscale["Tailscale"]
+        AdGuard["AdGuard Home\n*.idiotproductions.net → 10.0.0.136"]
+        Tailscale["Tailscale\nSubnet: 10.0.0.0/24"]
     end
 
     Internet --> Modem
-    Modem -. "Planned" .-> Router
-    Router -. "DNS" .-> AdGuard
-    Modem --> Proxmox
+    Modem --> Router
+    Router -- "DNS" --> AdGuard
+    Router --> Proxmox
     Proxmox --> jellyfin
     Proxmox --> mediastack
     Proxmox --> adguard
 
     qBit --> VPN
     Prowlarr --> Flare1
-    Prowlarr --> Flare2
     Sonarr --> Prowlarr
     Radarr --> Prowlarr
     Jellyseerr --> Sonarr
@@ -50,7 +49,12 @@ flowchart TD
     NPM -- "Reverse Proxy" --> Jellyseerr
     NPM -- "Reverse Proxy" --> Kuma
     NPM -- "Reverse Proxy" --> Homepage
+    NPM -- "Reverse Proxy" --> Tracker
 
     Kuma -- "Monitors" --> Jellyfin
     Kuma -- "Monitors" --> NPM
     Kuma -- "Monitors" --> AdGuard
+
+    RemoteUser(["📱 Remote User\n(Tailscale)"])
+    RemoteUser --> Tailscale
+    Tailscale -- "Subnet Route" --> Proxmox
