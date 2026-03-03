@@ -8,9 +8,31 @@ Full homelab setup running on Proxmox VE — reverse proxy, DNS ad-blocking, rem
 |-----------|---------|
 | Host | HP ProDesk 300 |
 | Hypervisor | Proxmox VE |
+| Router | GL.iNet Flint 3 (BE9300) |
 | Domain | idiotproductions.net (Cloudflare) |
 | Proxmox IP | 10.0.0.234 |
 | Tailscale IP | 100.92.204.101 |
+
+---
+
+## Network
+
+The GL.iNet Flint 3 operates in bridge mode with the Rogers XB10 modem, receiving a public IP directly from the ISP. All devices on the network use AdGuard Home for DNS, enforced at the router level.
+
+```
+Rogers XB10 (bridge mode — modem only)
+  └── GL.iNet Flint 3 (10.0.0.1) — router, DHCP, DNS forwarder
+        └── AdGuard Home (10.0.0.137) — DNS, ad blocking
+              └── Cloudflare (1.1.1.1) — upstream DNS
+```
+
+| Host | IP | Role |
+|------|----|------|
+| Flint 3 | 10.0.0.1 | Router / DHCP / DNS forwarder |
+| Proxmox | 10.0.0.234 | Hypervisor / Tailscale subnet router |
+| NPM LXC | 10.0.0.136 | Reverse proxy, Docker host |
+| AdGuard LXC | 10.0.0.137 | DNS, ad blocking, Tailscale |
+| Jellyfin LXC | 10.0.0.134 | Media server, VPN |
 
 ---
 
@@ -21,21 +43,23 @@ Three LXC containers running Ubuntu 22.04, each with a dedicated role:
 | LXC | IP | Services |
 |-----|----|---------|
 | jellyfin | 10.0.0.134 | Jellyfin, qBittorrent, NordVPN, FlareSolverr |
-| mediastack | 10.0.0.136 | Nginx Proxy Manager, Sonarr, Radarr, Prowlarr, Jellyseerr, Uptime Kuma, Homepage, Watchtower |
+| mediastack | 10.0.0.136 | Nginx Proxy Manager, Sonarr, Radarr, Prowlarr, Jellyseerr, Uptime Kuma, Homepage, Watchtower, Dark Angel Tracker |
 | adguard | 10.0.0.137 | AdGuard Home, Tailscale |
 
 The jellyfin and mediastack LXCs are intentionally split — NordVPN's kill switch inside the jellyfin LXC would otherwise block Docker container networking for the media management services.
 
 ```
-Internet → Cloudflare DNS → Nginx Proxy Manager (10.0.0.136)
-                                      ↓
-                          Routes to internal services
-                          
+Internet → Rogers XB10 (bridge) → Flint 3 (10.0.0.1)
+                                         ↓
+                              Cloudflare DNS → Nginx Proxy Manager (10.0.0.136)
+                                                         ↓
+                                             Routes to internal services
+
 Phone (Tailscale) → Split DNS → BIND9 on Proxmox host
-                                      ↓
-                          Resolves *.idiotproductions.net → 10.0.0.136
-                                      ↓
-                          Tailscale subnet route → NPM → service
+                                         ↓
+                             Resolves *.idiotproductions.net → 10.0.0.136
+                                         ↓
+                             Tailscale subnet route → NPM → service
 ```
 
 ---
@@ -49,11 +73,12 @@ Phone (Tailscale) → Split DNS → BIND9 on Proxmox host
 
 ### DNS & Ad Blocking — AdGuard Home
 - Running on `10.0.0.137`
+- Network-wide DNS enforced at router level via Flint 3
 - DNS rewrite: `*.idiotproductions.net` → `10.0.0.136`
 - Upstream DNS: Cloudflare (1.1.1.1)
 
 ### Remote Access — Tailscale
-- Installed on Proxmox host (pve01)
+- Installed on Proxmox host (pve01) and AdGuard LXC
 - Subnet routing: `10.0.0.0/24` advertised
 - Split DNS: `idiotproductions.net` queries routed via BIND9 on Proxmox (port 53)
 - Tailscale DNS nameserver: `100.92.204.101`
@@ -65,6 +90,12 @@ Phone (Tailscale) → Split DNS → BIND9 on Proxmox host
 - **Radarr** — movie automation
 - **Prowlarr** — indexer manager, feeds Sonarr and Radarr
 - **qBittorrent** — torrent client, runs behind NordVPN with kill switch enabled
+
+### Progress Tracking — Dark Angel Tracker
+- Self-hosted Flask web app for tracking health metrics and habits
+- REST API backend with SQLite persistence
+- Containerized with Docker, accessible at `https://progress.idiotproductions.net`
+- Source: [dark-angel-tracker](https://github.com/TechAsura/dark-angel-tracker)
 
 ### Monitoring — Uptime Kuma
 - Accessible at `https://uptime.idiotproductions.net`
@@ -163,4 +194,4 @@ echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 
 - NordVPN runs in the jellyfin LXC for qBittorrent only. Its kill switch breaks Docker networking, which is why all infrastructure services live in a separate mediastack LXC.
 - BIND9 is installed on the Proxmox host to serve DNS queries coming in over the Tailscale interface.
-- GL.iNet Flint 3 router pending setup for network-wide DNS via AdGuard.
+- GL.iNet Flint 3 operates in bridge mode — Rogers XB10 acts as modem only, Flint 3 owns routing, DHCP, and DNS forwarding for the entire network.
