@@ -32,7 +32,8 @@ Rogers XB10 (bridge mode — modem only)
 | Proxmox | 10.0.0.234 | Hypervisor / Tailscale subnet router |
 | NPM LXC | 10.0.0.136 | Reverse proxy, Docker host |
 | AdGuard LXC | 10.0.0.137 | DNS, ad blocking, Tailscale |
-| Jellyfin LXC | 10.0.0.134 | Media server, VPN |
+| Jellyfin LXC | 10.0.0.144 | Media server, VPN |
+| Frost (Windows) | 10.0.0.192 | Media storage / SMB share |
 
 ---
 
@@ -42,7 +43,7 @@ Three LXC containers running Ubuntu 22.04, each with a dedicated role:
 
 | LXC | IP | Services |
 |-----|----|---------|
-| jellyfin | 10.0.0.134 | Jellyfin, qBittorrent, NordVPN, FlareSolverr |
+| jellyfin | 10.0.0.144 | Jellyfin, qBittorrent, NordVPN, FlareSolverr |
 | mediastack | 10.0.0.136 | Nginx Proxy Manager, Sonarr, Radarr, Prowlarr, Jellyseerr, Uptime Kuma, Homepage, Watchtower, Dark Angel Tracker |
 | adguard | 10.0.0.137 | AdGuard Home, Tailscale |
 
@@ -75,7 +76,8 @@ Phone (Tailscale) → Split DNS → BIND9 on Proxmox host
 - Running on `10.0.0.137`
 - Network-wide DNS enforced at router level via Flint 3
 - DNS rewrite: `*.idiotproductions.net` → `10.0.0.136`
-- Upstream DNS: Cloudflare (1.1.1.1)
+- Upstream DNS: Cloudflare (`1.1.1.1`, `1.0.0.1`) over plain DNS, parallel requests mode
+- Tailscale DNS override disabled on AdGuard LXC (`tailscale set --accept-dns=false`)
 
 ### Remote Access — Tailscale
 - Installed on Proxmox host (pve01) and AdGuard LXC
@@ -90,6 +92,12 @@ Phone (Tailscale) → Split DNS → BIND9 on Proxmox host
 - **Radarr** — movie automation
 - **Prowlarr** — indexer manager, feeds Sonarr and Radarr
 - **qBittorrent** — torrent client, runs behind NordVPN with kill switch enabled
+
+### Media Storage
+- SMB share hosted on Frost (Windows 11, `10.0.0.192`)
+- Share name: `media`
+- Mounted on Proxmox host at `/mnt/media` via `/etc/fstab`
+- Bind mounted into jellyfin LXC at `/mnt/media`
 
 ### Progress Tracking — Dark Angel Tracker
 - Self-hosted Flask web app for tracking health metrics and habits
@@ -180,6 +188,38 @@ echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 
 ---
 
+### AdGuard DNS resolution slow or timing out
+
+**Symptom:** Sites take 3-15 seconds to load or fail intermittently. AdGuard logs show `i/o timeout` errors against upstream DNS servers.
+
+**Cause 1 — Tailscale overwriting resolv.conf on AdGuard LXC:** Tailscale sets the LXC's DNS to `100.100.100.100`, which can fail and take AdGuard's upstream resolution down with it.
+
+**Fix:**
+```bash
+pct exec 103 -- tailscale set --accept-dns=false
+pct exec 103 -- bash -c 'echo -e "nameserver 1.1.1.1\nnameserver 1.0.0.1" > /etc/resolv.conf'
+```
+
+**Cause 2 — Flint 3 "Override DNS Settings of All Clients" enabled:** This setting intercepts all outbound port 53 traffic including AdGuard's own upstream queries, creating a DNS loop.
+
+**Fix:** Flint 3 admin → Network → DNS → disable "Override DNS Settings of All Clients".
+
+---
+
+### Jellyfin media not found after router/network change
+
+**Symptom:** Jellyfin shows library items but playback fails with "Could not find file" errors.
+
+**Cause:** The SMB share from Frost (`10.0.0.192`) is not mounted on the Proxmox host, usually because the Windows machine changed IP or Windows classified the new network as Public (blocking SMB).
+
+**Fix:**
+1. On Frost, set the network to Private: Settings → Network & Internet → WiFi → set to Private
+2. Verify the IP in `/etc/fstab` on the Proxmox host matches Frost's current IP
+3. Remount: `systemctl daemon-reload && mount -a`
+4. Verify: `ls /mnt/media`
+
+---
+
 ### AdGuard LXC IP conflict
 
 **Symptom:** Network conflicts on 10.0.0.135.
@@ -195,3 +235,5 @@ echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 - NordVPN runs in the jellyfin LXC for qBittorrent only. Its kill switch breaks Docker networking, which is why all infrastructure services live in a separate mediastack LXC.
 - BIND9 is installed on the Proxmox host to serve DNS queries coming in over the Tailscale interface.
 - GL.iNet Flint 3 operates in bridge mode — Rogers XB10 acts as modem only, Flint 3 owns routing, DHCP, and DNS forwarding for the entire network.
+- All critical devices have static IP reservations on the Flint 3 to prevent IP changes on reboot.
+- Tailscale's `--accept-dns=false` is set on the AdGuard LXC to prevent it from overwriting `/etc/resolv.conf`.
