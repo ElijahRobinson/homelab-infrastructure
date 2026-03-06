@@ -30,7 +30,7 @@ Rogers XB10 (bridge mode — modem only)
 |------|----|------|
 | Flint 3 | 10.0.0.1 | Router / DHCP / DNS forwarder |
 | Proxmox | 10.0.0.234 | Hypervisor / Tailscale subnet router |
-| NPM LXC | 10.0.0.136 | Reverse proxy, Docker host |
+| Mediastack LXC | 10.0.0.136 | Reverse proxy, Docker host |
 | AdGuard LXC | 10.0.0.137 | DNS, ad blocking, Tailscale |
 | Jellyfin LXC | 10.0.0.144 | Media server, VPN |
 | Frost (Windows) | 10.0.0.192 | Media storage / SMB share |
